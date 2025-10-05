@@ -1,0 +1,7 @@
+streamlit
+speechrecognition
+gtts
+numpy
+pandas
+groq
+requests
