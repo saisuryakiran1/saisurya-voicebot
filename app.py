@@ -3,11 +3,13 @@ import speech_recognition as sr
 from gtts import gTTS
 import tempfile, os, base64, re
 from groq import Groq
+import time
 
 GROQ_API_KEY = "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"
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
+# ---------- Styling ----------
 st.markdown("""
 <style>
 body { background-color: black; color: white; }
@@ -26,6 +28,7 @@ footer { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ---------- Predefined answers ----------
 predefined_answers = {
     "what should we know about your life story":
         "Yo, it’s ya boy Sai Surya! MCA grad from India, I’m out here slinging code and diving deep into NLP and deep learning. Emotion detection’s my jam! 😜🚀",
@@ -39,6 +42,7 @@ predefined_answers = {
         "I treat every tech challenge like a boss fight — level up or crash trying. 🎮🔥",
 }
 
+# ---------- Helpers ----------
 def remove_emojis(text):
     emoji_pattern = re.compile("[" 
         u"\U0001F600-\U0001F64F"
@@ -55,14 +59,13 @@ def text_to_speech(text):
     tts.save(temp.name)
     return temp.name
 
-def autoplay_audio(path, play_id=None):
+def autoplay_audio(path):
     with open(path, "rb") as f:
         data = f.read()
         b64 = base64.b64encode(data).decode()
     html = f"""
     <audio id="bot-audio" controls autoplay style="width:100%;margin:16px 0 6px 0;">
         <source src="data:audio/mp3;base64,{b64}" type="audio/mp3" />
-        Your browser does not support the audio element.
     </audio>
     <script>
       const el = document.getElementById("bot-audio");
@@ -97,39 +100,61 @@ def ai_reply(user_input):
         st.error(f"Groq API error: {str(e)}")
         return "Oops! Something went off-track. Try again?"
 
+# ---------- State ----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "mic_version" not in st.session_state:
+    st.session_state.mic_version = 0
+if "last_processed_version" not in st.session_state:
+    st.session_state.last_processed_version = -1
 
+# ---------- Header ----------
 st.title("🎙️ Sai Surya’s Voice Bot")
-st.caption("Mic at the bottom. Tap to record, tap again to auto-submit. The bot replies with voice. (No file upload UI!)")
-st.markdown("<div height='42px' style='height:42px;'>&nbsp;</div>", unsafe_allow_html=True)
+st.caption("Mic at the bottom. Tap to record, tap again to stop. Bot replies immediately with voice.")
 
-for i, msg in enumerate(st.session_state.chat_history):
+# ---------- Render chat (top) ----------
+for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
-        if i == len(st.session_state.chat_history) - 1:
-            audio = text_to_speech(msg["content"])
-            autoplay_audio(audio)
 
-# --- Mic input permanently at the bottom, no extra form or uploader
+# ---------- Bottom mic (no forms, no uploader) ----------
 st.markdown("### Talk below 👇", unsafe_allow_html=True)
-audio_input = st.audio_input("🎤 Tap, Speak, Tap again! (No upload UI)", key="audio-mic")
+audio_input = st.audio_input("🎤 Tap, speak, tap again", key=f"audio-mic-{st.session_state.mic_version}")
 
-if audio_input:
-    recognizer = sr.Recognizer()
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_input.getvalue())
-        temp_audio_path = temp_audio.name
+# Detect a new recording by versioning the key so Streamlit treats it as a fresh widget
+if audio_input is not None and st.session_state.last_processed_version < st.session_state.mic_version:
     try:
+        # Transcribe immediately in the same rerun
+        recognizer = sr.Recognizer()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
+            temp_audio.write(audio_input.getvalue())
+            temp_audio_path = temp_audio.name
+
         with sr.AudioFile(temp_audio_path) as source:
             audio = recognizer.record(source)
             user_text = recognizer.recognize_google(audio)
-            st.session_state.chat_history.append({"role": "user", "content": user_text})
-            response = ai_reply(user_text)
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+        # Append and answer in the same run
+        st.session_state.chat_history.append({"role": "user", "content": user_text})
+        response = ai_reply(user_text)
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+
+        # Speak immediately
+        tts_path = text_to_speech(response)
+        autoplay_audio(tts_path)
+
+        # Mark this version as processed so it won't delay to next question
+        st.session_state.last_processed_version = st.session_state.mic_version
+
+        # Increment version so next tap records as a new widget instance
+        st.session_state.mic_version += 1
+
+        # Force rerun so the new chat appears above while mic resets cleanly
+        st.experimental_rerun()
     except Exception as e:
-        st.warning(f"Couldn't process your audio: {e}")
+        st.warning(f"Audio processing failed: {e}")
     finally:
-        os.remove(temp_audio_path)
+        try: os.remove(temp_audio_path)
+        except: pass
