@@ -1,22 +1,20 @@
 import streamlit as st
 import speech_recognition as sr
 from gtts import gTTS
-import tempfile, os, base64, re
+import tempfile, os, base64, re, uuid
 from groq import Groq
 
-# ==============================
-# Your Groq API key
-# ==============================
+# ====== CONFIG ======
 GROQ_API_KEY = "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"
-# ==============================
+# ====================
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
 # ---------- Styling ----------
 st.markdown("""
 <style>
-body { background-color: black; color: white; }
-.block-container { padding-bottom: 0px !important; }
+body { background-color: #0e0e0e; color: #fff; }
+.block-container { padding-bottom: 0 !important; }
 .user-message { background: #E0F7FA; color: #000; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; text-align: right; }
 .assistant-message { background: #2E2E2E; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; }
 .stAudio label { font-size: 0 !important; }
@@ -26,7 +24,11 @@ body { background-color: black; color: white; }
     border-radius: 18px !important;
     background: #222 !important;
 }
-.stAudio {display: flex; justify-content: center; align-items: center; padding: 50px 0 30px 0;}
+.stAudio {display: flex; justify-content: center; align-items: center; padding: 36px 0 28px 0;}
+.enable-audio { display:flex; justify-content:center; margin: 8px 0 16px 0; }
+.enable-audio button {
+    background:#43a047; color:#fff; border:none; border-radius:8px; padding:10px 14px; cursor:pointer;
+}
 footer { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -62,25 +64,33 @@ def text_to_speech(text):
     tts.save(temp.name)
     return temp.name
 
-def autoplay_audio(path):
-    with open(path, "rb") as f:
-        data = f.read()
-        b64 = base64.b64encode(data).decode()
+def speak_base64(b64_str, play_id=None):
+    if play_id is None:
+        play_id = str(uuid.uuid4())
     html = f"""
-    <audio id="bot-audio" controls autoplay style="width:100%;margin:16px 0 6px 0;">
-        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3" />
+    <audio id="bot-audio-{play_id}" controls autoplay style="width:100%;margin:16px 0 6px 0;">
+        <source src="data:audio/mp3;base64,{b64_str}" type="audio/mp3" />
     </audio>
     <script>
-      const el = document.getElementById("bot-audio");
-      if (el) {{
-        const tryPlay = () => {{
-          const p = el.play(); if (p && p.catch) p.catch(() => {{ }});
-        }};
-        tryPlay(); setTimeout(tryPlay, 250); setTimeout(tryPlay, 750);
-      }}
+      (function() {{
+        const el = document.getElementById("bot-audio-{play_id}");
+        if (!el) return;
+        const tries = [0, 200, 600, 1200];
+        function tryPlay() {{
+          const p = el.play();
+          if (p && p.catch) p.catch(()=>{{}});
+        }}
+        tries.forEach(t => setTimeout(tryPlay, t));
+      }})();
     </script>
     """
     st.markdown(html, unsafe_allow_html=True)
+
+def autoplay_audio(path, play_id=None):
+    with open(path, "rb") as f:
+        data = f.read()
+        b64 = base64.b64encode(data).decode()
+    speak_base64(b64, play_id)
     try: os.remove(path)
     except: pass
 
@@ -107,55 +117,62 @@ def ai_reply(user_input):
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "mic_version" not in st.session_state:
-    st.session_state.mic_version = 0         # increments after each processed audio
+    st.session_state.mic_version = 0
 if "processed_version" not in st.session_state:
-    st.session_state.processed_version = -1  # last processed mic version
+    st.session_state.processed_version = -1
+if "audio_enabled" not in st.session_state:
+    st.session_state.audio_enabled = False  # user gesture to allow autoplay on mobile
 
 # ---------- Header ----------
 st.title("🎙️ Sai Surya’s Voice Bot")
-st.caption("Mic at the bottom. Tap to record, tap again to stop. Bot replies immediately with voice.")
+st.caption("Mic at the bottom. Tap to record, tap again to stop. You’ll hear the bot reply immediately.")
 
-# ---------- Display chat ----------
+# ---------- Chat display ----------
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
 
-# ---------- Bottom mic (versioned key) ----------
+# ---------- One-time audio enable button (fixes mobile autoplay) ----------
+col1, col2, col3 = st.columns([1,2,1])
+with col2:
+    if not st.session_state.audio_enabled:
+        if st.button("✓ Enable sound"):
+            st.session_state.audio_enabled = True
+            # a tiny silent audio to unlock autoplay policy
+            silent = base64.b64encode(b"\x00\x00").decode()
+            speak_base64(silent, play_id="unlock")
+            st.rerun()
+
+# ---------- Bottom mic (versioned key to avoid Q1/Q2 shift) ----------
 st.markdown("### Talk below 👇", unsafe_allow_html=True)
 mic_key = f"audio-mic-v{st.session_state.mic_version}"
 audio_input = st.audio_input("🎤 Tap, speak, tap again", key=mic_key)
 
-# Process only once per version, in the same rerun
+# Process exactly once for each mic version, and speak immediately
 if audio_input is not None and st.session_state.processed_version < st.session_state.mic_version:
     temp_audio_path = None
     try:
-        # Save to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio.write(audio_input.getvalue())
             temp_audio_path = temp_audio.name
 
-        # Transcribe
         recognizer = sr.Recognizer()
         with sr.AudioFile(temp_audio_path) as source:
             audio = recognizer.record(source)
             user_text = recognizer.recognize_google(audio)
 
-        # Append user + assistant
         st.session_state.chat_history.append({"role": "user", "content": user_text})
         response = ai_reply(user_text)
         st.session_state.chat_history.append({"role": "assistant", "content": response})
 
-        # Speak immediately
+        # TTS and autoplay (works after user pressed Enable sound once)
         tts_path = text_to_speech(response)
-        autoplay_audio(tts_path)
+        autoplay_audio(tts_path, play_id=f"turn-{st.session_state.mic_version}")
 
-        # Mark processed and bump version so the next recording is a fresh widget
         st.session_state.processed_version = st.session_state.mic_version
         st.session_state.mic_version += 1
-
-        # Rerun with the updated state (Streamlit Cloud: use st.rerun)
         st.rerun()
     except Exception as e:
         st.warning(f"Audio processing failed: {e}")
