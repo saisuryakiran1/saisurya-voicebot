@@ -13,15 +13,16 @@ st.markdown("""
 body { background-color: #17191b !important; color: #fff; }
 .block-container { padding-bottom: 120px !important; }
 .user-message { background: #E0F7FA; color: #000; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; text-align: right; }
-.assistant-message { background: #222; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px;}
+.assistant-message { background: #222; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; }
 .stAudio label { font-size: 0 !important; }
 .stAudio button { 
-    transform: scale(2.5) !important;
-    border: 3px solid #fff !important;
+    transform: scale(2.6) !important;
+    border: 4px solid #fff !important;
     border-radius: 50% !important;
     background: #e53935 !important;
-    width: 60px !important;
-    height: 60px !important;
+    width: 70px !important;
+    height: 70px !important;
+    margin: 0 auto !important;
 }
 .stAudio input[type=range] { 
     transform: scale(2) !important;
@@ -32,17 +33,19 @@ body { background-color: #17191b !important; color: #fff; }
     justify-content: center !important; 
     align-items: center !important; 
     position: fixed !important;
-    bottom: 20px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 300px !important;
-    background: rgba(20,20,20,0.95) !important;
-    padding: 20px !important;
-    border-radius: 20px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 24px !important;
+    z-index: 10000 !important;
+    margin: 0 auto !important;
+    padding: 32px !important;
+    background: rgba(32, 32, 32, 0.94) !important;
+    border-radius: 24px !important;
+    max-width: 390px !important;
     border: 2px solid #333 !important;
-    z-index: 9999 !important;
 }
-footer { display:none !important; }
+footer {display:none !important;}
+.st-emotion-cache-13ejsyy {max-width:700px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,9 +130,8 @@ if "processed_version" not in st.session_state:
     st.session_state.processed_version = -1
 
 st.title("🎙️ Sai Surya's Voice Bot")
-st.caption("Large mic at bottom center. Tap, speak, tap again. Bot replies and speaks instantly.")
+st.caption("Tap the big mic at the bottom, speak, tap again to stop. Bot replies instantly and speaks.")
 
-# Display all chat messages
 for i, msg in enumerate(st.session_state.chat_history):
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -139,9 +141,9 @@ for i, msg in enumerate(st.session_state.chat_history):
             tts_path = text_to_speech(msg["content"])
             autoplay_audio(tts_path, play_id=f"turn-{i}")
 
-# Large centered mic at bottom - versioned to prevent Q1/Q2 lag
+# Absolutely positioned big mic at the bottom (this is as close as you can get in Streamlit)
 mic_key = f"audio-mic-{st.session_state.mic_version}"
-audio_input = st.audio_input("🎤", key=mic_key)
+audio_input = st.audio_input("", key=mic_key, label_visibility="hidden")
 
 if audio_input is not None and st.session_state.processed_version < st.session_state.mic_version:
     temp_audio_path = None
