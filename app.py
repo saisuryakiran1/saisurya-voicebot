@@ -14,9 +14,7 @@ body { background-color: black; color: white; }
 .block-container { padding-bottom: 0px !important; }
 .user-message { background: #E0F7FA; color: #000; padding: 8px; border-radius: 6px; margin-bottom: 6px; text-align: right; }
 .assistant-message { background: #2E2E2E; color: #E0E0E0; padding: 8px; border-radius: 6px; margin-bottom: 6px; }
-.stAudio label { 
-    font-size: 0 !important;
-}
+.stAudio label { font-size: 0 !important; }
 .stAudio button, .stAudio input[type=range] { 
     transform: scale(1.6);
     border: 2px solid #fff !important;
@@ -106,8 +104,8 @@ def ai_reply(user_input):
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "last_audio_played" not in st.session_state:
-    st.session_state.last_audio_played = -1
+if "last_spoken_index" not in st.session_state:
+    st.session_state.last_spoken_index = -1
 
 st.title("🎙️ Sai Surya’s Voice Bot")
 st.markdown("MCA grad. AI geek. Talks like a witty human. Let’s roll!")
@@ -118,16 +116,17 @@ for i, msg in enumerate(st.session_state.chat_history):
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
-        if i > st.session_state.last_audio_played:
+        # Speak only the newest response when created, never double
+        if i == st.session_state.last_spoken_index:
             audio = text_to_speech(msg["content"])
             autoplay_audio(audio, play_id=f"turn-{i}")
-            st.session_state.last_audio_played = i
 
 # --- The mic input widget (and nothing else) pinned to bottom ---
 st.markdown("<div height='72px' style='height:72px;'>&nbsp;</div>", unsafe_allow_html=True)
 st.markdown("### Talk to the bot below ⬇️", unsafe_allow_html=True)
 audio_input = st.audio_input("🎤", key="bottom_mic")
 
+# --- On new mic input: handle recognition and reply, update spoken index ---
 if audio_input:
     recognizer = sr.Recognizer()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
@@ -140,6 +139,8 @@ if audio_input:
             st.session_state.chat_history.append({"role": "user", "content": user_text})
             response = ai_reply(user_text)
             st.session_state.chat_history.append({"role": "assistant", "content": response})
+            # Now only the new assistant message will trigger TTS
+            st.session_state.last_spoken_index = len(st.session_state.chat_history) - 1
     except Exception as e:
         st.warning(f"Couldn't process your audio: {e}")
     finally:
