@@ -8,21 +8,19 @@ GROQ_API_KEY = "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"
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
+# --------- Styling ---------
 st.markdown("""
 <style>
-body { background-color: #17191b !important; color: #fff; }
-.block-container { padding-bottom: 0 !important; }
-.user-message { background: #E0F7FA; color: #000; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; text-align: right; }
-.assistant-message { background: #222; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px;}
-.stAudio label { font-size: 0 !important; }
-.stAudio button, .stAudio input[type=range] { 
-    transform: scale(1.6);
-    border: 2px solid #fff !important;
-    border-radius: 18px !important;
-    background: #222 !important;
-}
-.stAudio {display: flex; justify-content: center; align-items: center; padding: 42px 0 30px 0;}
-footer { display:none !important; }
+body { background: #17191b !important; color: #fff; }
+.block-container {padding-bottom: 0!important;}
+.user-message { background: #E0F7FA; color: #000; padding: 12px 16px; border-radius: 12px; margin: 10px 0; text-align: right;}
+.assistant-message { background: #23272b; color: #E8E8E8; padding: 12px 16px; border-radius: 12px; margin: 8px 0;}
+footer {display:none;}
+.st-emotion-cache-13ejsyy {max-width: 700px;}
+.mic-bar {width:100%;display:flex;justify-content:center;position:fixed;bottom:0;left:0;right:0;z-index:20;background:rgba(20,20,20,0.99);padding:28px 0 26px 0;}
+.stAudio input[type=range], .stAudio button {transform:scale(2);}
+.stAudio {justify-content:center !important;}
+.mic-instruction {display:block;width:100%;text-align:center;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,9 +105,8 @@ if "processed_version" not in st.session_state:
     st.session_state.processed_version = -1
 
 st.title("🎙️ Sai Surya’s Voice Bot")
-st.caption("Tap mic below, speak, tap again to stop. Bot replies instantly and speaks.")
+st.caption("Tap the big mic at the bottom, speak, tap again to stop. Bot replies instantly and speaks.")
 
-# --- All previous chat on top, always show ---
 for i, msg in enumerate(st.session_state.chat_history):
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -119,15 +116,22 @@ for i, msg in enumerate(st.session_state.chat_history):
             tts_path = text_to_speech(msg["content"])
             autoplay_audio(tts_path, play_id=f"turn-{i}")
 
-# --- Big mic at bottom, new widget key for each turn so no stale audio buffer (no Q1/Q2 lag) ---
-st.markdown("### Talk below 👇", unsafe_allow_html=True)
+# --- BIG MIC floating bar at the bottom ---
+st.markdown(
+    """
+    <div class="mic-bar">
+        <div class="mic-instruction">🎤 <b>Tap the big mic, Speak, Tap again</b></div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+# Centered large mic input, always fresh per turn
 mic_key = f"audio-mic-{st.session_state.mic_version}"
-audio_input = st.audio_input("🎤 Tap, speak, tap again", key=mic_key)
+audio_input = st.audio_input("", key=mic_key, label_visibility="hidden")
 
 if audio_input is not None and st.session_state.processed_version < st.session_state.mic_version:
     temp_audio_path = None
     try:
-        # Save and process audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio.write(audio_input.getvalue())
             temp_audio_path = temp_audio.name
