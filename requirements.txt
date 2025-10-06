@@ -1,7 +1,4 @@
+streamlit
 SpeechRecognition
 gtts
-numpy
-pandas
 groq
-requests
-streamlit
