@@ -3,9 +3,12 @@ import speech_recognition as sr
 from gtts import gTTS
 import tempfile, os, base64, re
 from groq import Groq
-import time
 
+# ==============================
+# Your Groq API key
+# ==============================
 GROQ_API_KEY = "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"
+# ==============================
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
@@ -104,39 +107,42 @@ def ai_reply(user_input):
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "mic_version" not in st.session_state:
-    st.session_state.mic_version = 0
-if "last_processed_version" not in st.session_state:
-    st.session_state.last_processed_version = -1
+    st.session_state.mic_version = 0         # increments after each processed audio
+if "processed_version" not in st.session_state:
+    st.session_state.processed_version = -1  # last processed mic version
 
 # ---------- Header ----------
 st.title("🎙️ Sai Surya’s Voice Bot")
 st.caption("Mic at the bottom. Tap to record, tap again to stop. Bot replies immediately with voice.")
 
-# ---------- Render chat (top) ----------
+# ---------- Display chat ----------
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
 
-# ---------- Bottom mic (no forms, no uploader) ----------
+# ---------- Bottom mic (versioned key) ----------
 st.markdown("### Talk below 👇", unsafe_allow_html=True)
-audio_input = st.audio_input("🎤 Tap, speak, tap again", key=f"audio-mic-{st.session_state.mic_version}")
+mic_key = f"audio-mic-v{st.session_state.mic_version}"
+audio_input = st.audio_input("🎤 Tap, speak, tap again", key=mic_key)
 
-# Detect a new recording by versioning the key so Streamlit treats it as a fresh widget
-if audio_input is not None and st.session_state.last_processed_version < st.session_state.mic_version:
+# Process only once per version, in the same rerun
+if audio_input is not None and st.session_state.processed_version < st.session_state.mic_version:
+    temp_audio_path = None
     try:
-        # Transcribe immediately in the same rerun
-        recognizer = sr.Recognizer()
+        # Save to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio.write(audio_input.getvalue())
             temp_audio_path = temp_audio.name
 
+        # Transcribe
+        recognizer = sr.Recognizer()
         with sr.AudioFile(temp_audio_path) as source:
             audio = recognizer.record(source)
             user_text = recognizer.recognize_google(audio)
 
-        # Append and answer in the same run
+        # Append user + assistant
         st.session_state.chat_history.append({"role": "user", "content": user_text})
         response = ai_reply(user_text)
         st.session_state.chat_history.append({"role": "assistant", "content": response})
@@ -145,16 +151,15 @@ if audio_input is not None and st.session_state.last_processed_version < st.sess
         tts_path = text_to_speech(response)
         autoplay_audio(tts_path)
 
-        # Mark this version as processed so it won't delay to next question
-        st.session_state.last_processed_version = st.session_state.mic_version
-
-        # Increment version so next tap records as a new widget instance
+        # Mark processed and bump version so the next recording is a fresh widget
+        st.session_state.processed_version = st.session_state.mic_version
         st.session_state.mic_version += 1
 
-        # Force rerun so the new chat appears above while mic resets cleanly
-        st.experimental_rerun()
+        # Rerun with the updated state (Streamlit Cloud: use st.rerun)
+        st.rerun()
     except Exception as e:
         st.warning(f"Audio processing failed: {e}")
     finally:
-        try: os.remove(temp_audio_path)
-        except: pass
+        if temp_audio_path:
+            try: os.remove(temp_audio_path)
+            except: pass
