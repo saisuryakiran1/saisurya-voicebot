@@ -4,24 +4,30 @@ from gtts import gTTS
 import tempfile, os, base64, re
 from groq import Groq
 
-# ==============================
-# 🔑 Direct API Key here
-# ==============================
 GROQ_API_KEY = "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"
-# ==============================
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
-# --- Styling ---
 st.markdown("""
 <style>
 body { background-color: black; color: white; }
+.block-container { padding-bottom: 0px !important; }
 .user-message { background: #E0F7FA; color: #000; padding: 8px; border-radius: 6px; margin-bottom: 6px; text-align: right; }
 .assistant-message { background: #2E2E2E; color: #E0E0E0; padding: 8px; border-radius: 6px; margin-bottom: 6px; }
+.stAudio label { 
+    font-size: 0 !important;
+}
+.stAudio button, .stAudio input[type=range] { 
+    transform: scale(1.6);
+    border: 2px solid #fff !important;
+    border-radius: 18px !important;
+    background: #222 !important;
+}
+.stAudio {display: flex; justify-content: center; align-items: center; padding: 40px 0 10px 0;}
+footer { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Predefined responses ---
 predefined_answers = {
     "what should we know about your life story":
         "Yo, it’s ya boy Sai Surya! MCA grad from India, I’m out here slinging code and diving deep into NLP and deep learning. Emotion detection’s my jam! 😜🚀",
@@ -35,9 +41,8 @@ predefined_answers = {
         "I treat every tech challenge like a boss fight — level up or crash trying. 🎮🔥",
 }
 
-# --- Emoji filter ---
 def remove_emojis(text):
-    emoji_pattern = re.compile("["
+    emoji_pattern = re.compile("[" 
         u"\U0001F600-\U0001F64F"
         u"\U0001F300-\U0001F5FF"
         u"\U0001F680-\U0001F6FF"
@@ -45,7 +50,6 @@ def remove_emojis(text):
         "]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
 
-# --- Text to Speech ---
 def text_to_speech(text):
     text_clean = remove_emojis(text)
     tts = gTTS(text=text_clean, lang='en')
@@ -53,19 +57,14 @@ def text_to_speech(text):
     tts.save(temp.name)
     return temp.name
 
-# --- Reliable autoplay: fresh audio element + retries each turn ---
 def autoplay_audio(path, play_id=None):
-    # Read audio as base64
     with open(path, "rb") as f:
         data = f.read()
         b64 = base64.b64encode(data).decode()
-    
-    # Unique key per turn to force re-mount
     if play_id is None:
         play_id = str(len(st.session_state.get("chat_history", [])))
-    
     html = f"""
-    <audio id="bot-audio-{play_id}" controls autoplay style="width: 100%;">
+    <audio id="bot-audio-{play_id}" controls autoplay style="width:100%;margin:20px 0 10px 0;">
         <source src="data:audio/mp3;base64,{b64}" type="audio/mp3" />
         Your browser does not support the audio element.
     </audio>
@@ -83,12 +82,9 @@ def autoplay_audio(path, play_id=None):
     </script>
     """
     st.markdown(html, unsafe_allow_html=True)
-    try:
-        os.remove(path)
-    except Exception:
-        pass
+    try: os.remove(path)
+    except: pass
 
-# --- AI reply logic ---
 def ai_reply(user_input):
     user_lower = user_input.lower()
     for key in predefined_answers:
@@ -108,7 +104,6 @@ def ai_reply(user_input):
         st.error(f"Groq API error: {str(e)}")
         return "Oops! Something went off-track. Try again?"
 
-# --- Chat session state ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "last_audio_played" not in st.session_state:
@@ -117,9 +112,21 @@ if "last_audio_played" not in st.session_state:
 st.title("🎙️ Sai Surya’s Voice Bot")
 st.markdown("MCA grad. AI geek. Talks like a witty human. Let’s roll!")
 
-# --- Audio input (Browser mic) ---
-audio_input = st.audio_input("🎤 Speak your question here")
-user_text = st.chat_input("Or type your message here...")
+# --- Main chat area above mic, only user/assistant messages ---
+for i, msg in enumerate(st.session_state.chat_history):
+    if msg["role"] == "user":
+        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
+        if i > st.session_state.last_audio_played:
+            audio = text_to_speech(msg["content"])
+            autoplay_audio(audio, play_id=f"turn-{i}")
+            st.session_state.last_audio_played = i
+
+# --- The mic input widget (and nothing else) pinned to bottom ---
+st.markdown("<div height='72px' style='height:72px;'>&nbsp;</div>", unsafe_allow_html=True)
+st.markdown("### Talk to the bot below ⬇️", unsafe_allow_html=True)
+audio_input = st.audio_input("🎤", key="bottom_mic")
 
 if audio_input:
     recognizer = sr.Recognizer()
@@ -130,26 +137,10 @@ if audio_input:
         with sr.AudioFile(temp_audio_path) as source:
             audio = recognizer.record(source)
             user_text = recognizer.recognize_google(audio)
-            st.write(f"🗣️ You said: {user_text}")
+            st.session_state.chat_history.append({"role": "user", "content": user_text})
+            response = ai_reply(user_text)
+            st.session_state.chat_history.append({"role": "assistant", "content": response})
     except Exception as e:
         st.warning(f"Couldn't process your audio: {e}")
     finally:
         os.remove(temp_audio_path)
-
-if user_text:
-    st.session_state.chat_history.append({"role": "user", "content": user_text})
-    response = ai_reply(user_text)
-    st.session_state.chat_history.append({"role": "assistant", "content": response})
-
-# --- Display chat and play voice for the latest assistant reply ---
-for i, msg in enumerate(st.session_state.chat_history):
-    if msg["role"] == "user":
-        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
-        # Only play for the newest response that has not yet triggered voice
-        if i > st.session_state.last_audio_played:
-            audio = text_to_speech(msg["content"])
-            autoplay_audio(audio, play_id=f"turn-{i}")
-            st.session_state.last_audio_played = i
-
