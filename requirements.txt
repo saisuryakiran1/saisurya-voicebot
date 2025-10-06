@@ -2,3 +2,5 @@ streamlit
 SpeechRecognition
 gtts
 groq
+streamlit-webrtc
+numpy
