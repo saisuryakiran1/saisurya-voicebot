@@ -4,10 +4,15 @@ from gtts import gTTS
 import tempfile, os, base64, re
 from groq import Groq
 
+# ==============================
+# Your Groq API key
+# ==============================
 GROQ_API_KEY = "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"
+# ==============================
 
 st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layout="wide")
 
+# ---------- Styling ----------
 st.markdown("""
 <style>
 body { background-color: black; color: white; }
@@ -26,6 +31,7 @@ footer { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ---------- Predefined answers ----------
 predefined_answers = {
     "what should we know about your life story":
         "Yo, it’s ya boy Sai Surya! MCA grad from India, I’m out here slinging code and diving deep into NLP and deep learning. Emotion detection’s my jam! 😜🚀",
@@ -39,6 +45,7 @@ predefined_answers = {
         "I treat every tech challenge like a boss fight — level up or crash trying. 🎮🔥",
 }
 
+# ---------- Helpers ----------
 def remove_emojis(text):
     emoji_pattern = re.compile("[" 
         u"\U0001F600-\U0001F64F"
@@ -60,7 +67,7 @@ def autoplay_audio(path, play_id=None):
         data = f.read()
         b64 = base64.b64encode(data).decode()
     if play_id is None:
-        play_id = str(len(st.session_state.get("chat_history", [])))
+        play_id = "latest"
     html = f"""
     <audio id="bot-audio-{play_id}" controls autoplay style="width:100%;margin:20px 0 10px 0;">
         <source src="data:audio/mp3;base64,{b64}" type="audio/mp3" />
@@ -102,32 +109,25 @@ def ai_reply(user_input):
         st.error(f"Groq API error: {str(e)}")
         return "Oops! Something went off-track. Try again?"
 
+# ---------- State ----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "last_spoken_index" not in st.session_state:
-    st.session_state.last_spoken_index = -1
 
+# ---------- Header ----------
 st.title("🎙️ Sai Surya’s Voice Bot")
 st.markdown("MCA grad. AI geek. Talks like a witty human. Let’s roll!")
 
-# --- Main chat area above mic, only user/assistant messages ---
-for i, msg in enumerate(st.session_state.chat_history):
-    if msg["role"] == "user":
-        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
-        # Speak only the newest response when created, never double
-        if i == st.session_state.last_spoken_index:
-            audio = text_to_speech(msg["content"])
-            autoplay_audio(audio, play_id=f"turn-{i}")
-
-# --- The mic input widget (and nothing else) pinned to bottom ---
+# ---------- Mic form at bottom (prevents 'stuck until next turn') ----------
 st.markdown("<div height='72px' style='height:72px;'>&nbsp;</div>", unsafe_allow_html=True)
 st.markdown("### Talk to the bot below ⬇️", unsafe_allow_html=True)
-audio_input = st.audio_input("🎤", key="bottom_mic")
 
-# --- On new mic input: handle recognition and reply, update spoken index ---
-if audio_input:
+with st.form(key="voice-form", clear_on_submit=True):
+    audio_input = st.audio_input("🎤", key="bottom_mic")
+    submitted = st.form_submit_button("Send Voice")
+
+# Process audio and update chat within the same rerun
+new_assistant_index = None
+if submitted and audio_input:
     recognizer = sr.Recognizer()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
         temp_audio.write(audio_input.getvalue())
@@ -136,12 +136,22 @@ if audio_input:
         with sr.AudioFile(temp_audio_path) as source:
             audio = recognizer.record(source)
             user_text = recognizer.recognize_google(audio)
-            st.session_state.chat_history.append({"role": "user", "content": user_text})
-            response = ai_reply(user_text)
-            st.session_state.chat_history.append({"role": "assistant", "content": response})
-            # Now only the new assistant message will trigger TTS
-            st.session_state.last_spoken_index = len(st.session_state.chat_history) - 1
+
+        st.session_state.chat_history.append({"role": "user", "content": user_text})
+        response = ai_reply(user_text)
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+        new_assistant_index = len(st.session_state.chat_history) - 1
     except Exception as e:
         st.warning(f"Couldn't process your audio: {e}")
     finally:
         os.remove(temp_audio_path)
+
+# ---------- Display chat and speak ONLY the newest assistant reply ----------
+for i, msg in enumerate(st.session_state.chat_history):
+    if msg["role"] == "user":
+        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="assistant-message">{msg["content"]}</div>', unsafe_allow_html=True)
+        if new_assistant_index is not None and i == new_assistant_index:
+            audio = text_to_speech(msg["content"])
+            autoplay_audio(audio, play_id=f"turn-{i}")
