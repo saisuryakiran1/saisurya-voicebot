@@ -11,53 +11,30 @@ st.set_page_config(page_title="Sai Surya's Voice Bot", page_icon="🎙️", layo
 st.markdown("""
 <style>
 body { background-color: #17191b !important; color: #fff; }
-.block-container { padding-bottom: 120px !important; }
+.block-container { padding-bottom: 0 !important; }
 .user-message { background: #E0F7FA; color: #000; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; text-align: right; }
-.assistant-message { background: #222; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px; }
+.assistant-message { background: #222; color: #E0E0E0; padding: 10px 12px; border-radius: 10px; margin: 6px 0 10px;}
 .stAudio label { font-size: 0 !important; }
-.stAudio button { 
-    transform: scale(2.6) !important;
-    border: 4px solid #fff !important;
-    border-radius: 50% !important;
-    background: #e53935 !important;
-    width: 70px !important;
-    height: 70px !important;
-    margin: 0 auto !important;
+.stAudio button, .stAudio input[type=range] { 
+    transform: scale(1.6);
+    border: 2px solid #fff !important;
+    border-radius: 18px !important;
+    background: #222 !important;
 }
-.stAudio input[type=range] { 
-    transform: scale(2) !important;
-    margin: 0 20px !important;
-}
-.stAudio {
-    display: flex !important; 
-    justify-content: center !important; 
-    align-items: center !important; 
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 24px !important;
-    z-index: 10000 !important;
-    margin: 0 auto !important;
-    padding: 32px !important;
-    background: rgba(32, 32, 32, 0.94) !important;
-    border-radius: 24px !important;
-    max-width: 390px !important;
-    border: 2px solid #333 !important;
-}
-footer {display:none !important;}
-.st-emotion-cache-13ejsyy {max-width:700px;}
+.stAudio {display: flex; justify-content: center; align-items: center; padding: 42px 0 30px 0;}
+footer { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
 predefined_answers = {
     "what should we know about your life story":
-        "Yo, it's ya boy Sai Surya! MCA grad from India, I'm out here slinging code and diving deep into NLP and deep learning. Emotion detection's my jam! 😜🚀",
+        "Yo, it’s ya boy Sai Surya! MCA grad from India, I’m out here slinging code and diving deep into NLP and deep learning. Emotion detection’s my jam! 😜🚀",
     "what's your #1 superpower":
         "Catching emotions in text faster than Spider-Man catches villains! 🕸️😂",
     "what are the top 3 areas you'd like to grow in":
         "AI research, ML scaling, and keeping my chat game slick. 😎🎤",
     "what misconception do your coworkers have about you":
-        "They think I'm quiet, but I'm secretly brewing deep learning spells. 🧙‍♂️💾",
+        "They think I’m quiet, but I’m secretly brewing deep learning spells. 🧙‍♂️💾",
     "how do you push your boundaries and limits":
         "I treat every tech challenge like a boss fight — level up or crash trying. 🎮🔥",
 }
@@ -113,7 +90,7 @@ def ai_reply(user_input):
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You're Sai Surya, an MCA grad from India who's into deep learning and NLP. Speak like a funny, confident, tech-savvy human — mix humor and intelligence naturally."},
+                {"role": "system", "content": "You’re Sai Surya, an MCA grad from India who’s into deep learning and NLP. Speak like a funny, confident, tech-savvy human — mix humor and intelligence naturally."},
                 {"role": "user", "content": user_input}
             ]
         )
@@ -129,9 +106,10 @@ if "mic_version" not in st.session_state:
 if "processed_version" not in st.session_state:
     st.session_state.processed_version = -1
 
-st.title("🎙️ Sai Surya's Voice Bot")
-st.caption("Tap the big mic at the bottom, speak, tap again to stop. Bot replies instantly and speaks.")
+st.title("🎙️ Sai Surya’s Voice Bot")
+st.caption("Tap mic below, speak, tap again to stop. Bot replies instantly and speaks.")
 
+# --- All previous chat on top, always show ---
 for i, msg in enumerate(st.session_state.chat_history):
     if msg["role"] == "user":
         st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
@@ -141,13 +119,15 @@ for i, msg in enumerate(st.session_state.chat_history):
             tts_path = text_to_speech(msg["content"])
             autoplay_audio(tts_path, play_id=f"turn-{i}")
 
-# Absolutely positioned big mic at the bottom (this is as close as you can get in Streamlit)
+# --- Big mic at bottom, new widget key for each turn so no stale audio buffer (no Q1/Q2 lag) ---
+st.markdown("### Talk below 👇", unsafe_allow_html=True)
 mic_key = f"audio-mic-{st.session_state.mic_version}"
-audio_input = st.audio_input("", key=mic_key, label_visibility="hidden")
+audio_input = st.audio_input("🎤 Tap, speak, tap again", key=mic_key)
 
 if audio_input is not None and st.session_state.processed_version < st.session_state.mic_version:
     temp_audio_path = None
     try:
+        # Save and process audio
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
             temp_audio.write(audio_input.getvalue())
             temp_audio_path = temp_audio.name
@@ -167,3 +147,4 @@ if audio_input is not None and st.session_state.processed_version < st.session_s
         if temp_audio_path:
             try: os.remove(temp_audio_path)
             except: pass
+
